@@ -1,7 +1,7 @@
 {
-  "name": "juris-ssr-app",
-  "version": "1.0.0",
-  "description": "Juris app with StringRenderer and SimpleRouter SSR",
+  "name": "juris-kit-app",
+  "version": "0.1.1",
+  "description": "Juris Full Stack SSR App - A server-side rendering application using Juris and Fastify.",
   "main": "server.js",
   "engines": {
     "node": ">=18.0.0",
@@ -30,7 +30,7 @@
     "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\" \"*.js\"",
     "setup": "node scripts/setup.js",
     "clean": "rm -rf dist/ logs/ temp/ coverage/",
-    "docker:build": "docker build -t juris-ssr-app .",
+    "docker:build": "docker build -t juris-kit-app .",
     "docker:dev": "docker-compose -f docker/docker-compose.dev.yml up",
     "docker:prod": "docker-compose -f docker/docker-compose.yml up",
     "migrate": "node scripts/migrate.js",
@@ -88,12 +88,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/username/juris-ssr-app.git"
+    "url": "git+https://github.com/jurisjs/juris-kit.git"
   },
   "bugs": {
-    "url": "https://github.com/username/juris-ssr-app/issues"
+    "url": "https://github.com/jurisjs/juris-kit/issues"
   },
-  "homepage": "https://github.com/username/juris-ssr-app#readme",
+  "homepage": "https://github.com/jurisjs/juris-kit#readme",
   "files": [
     "dist/",
     "src/",

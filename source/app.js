@@ -13,18 +13,34 @@
 	}
 
 	// StringRenderer Headless Component with StringRenderer class inside
+	// StringRenderer Headless Component with proper component handling
 	const StringRendererComponent = (props, context) => {
 		const { getState, juris } = context;
 
 		const originalDOMRenderer = juris.domRenderer;
 
-		// StringRenderer class defined inside the component
+		// Enhanced StringRenderer with proper attribute handling and component support
 		class StringRenderer {
-			constructor() {
+			constructor(juris = null) {
 				this.renderMode = 'string';
-				this.juris = juris; // Use juris from component closure
+				this.juris = juris; // Set from constructor parameter
 				this.renderDepth = 0;
 				this.maxRenderDepth = 100;
+
+				// Boolean attributes that should be rendered without values when true
+				this.booleanAttributes = new Set([
+					'autofocus', 'autoplay', 'async', 'checked', 'controls', 'defer',
+					'disabled', 'hidden', 'loop', 'multiple', 'muted', 'open',
+					'readonly', 'required', 'reversed', 'selected', 'default'
+				]);
+
+				// Attributes that should be skipped completely
+				this.skipAttributes = new Set([
+					'children', 'text', 'style', 'key'
+				]);
+
+				// Event handler patterns (attributes starting with 'on')
+				this.eventHandlerPattern = /^on[a-z]/i;
 			}
 
 			render(vnode, context = null) {
@@ -66,7 +82,7 @@
 
 				const nodeProps = vnode[tagName] || {};
 
-				// Check if it's a component
+				// Check if it's a component - FIXED: ensure juris and componentManager exist
 				if (this.juris && this.juris.componentManager && this.juris.componentManager.components.has(tagName)) {
 					return this._renderComponent(tagName, nodeProps, context);
 				}
@@ -79,7 +95,7 @@
 				try {
 					const componentFn = this.juris.componentManager.components.get(tagName);
 
-					// Use the existing context from Juris
+					// Create proper context for component - FIXED: use juris.createContext
 					let componentContext = parentContext;
 					if (!componentContext) {
 						componentContext = this.juris.createContext();
@@ -112,7 +128,7 @@
 							// Check if it's a valid HTML tag or component
 							const isValidTag = /^[a-z][a-z0-9]*$/i.test(firstKey) ||
 								/^[A-Z][a-zA-Z0-9]*$/.test(firstKey) ||
-								this.juris.componentManager.components.has(firstKey);
+								(this.juris && this.juris.componentManager && this.juris.componentManager.components.has(firstKey));
 
 							if (isValidTag) {
 								return this.render(componentResult, componentContext);
@@ -131,33 +147,14 @@
 			_renderElement(tagName, props, context) {
 				let html = `<${tagName}`;
 
-				// Handle attributes
-				Object.keys(props).forEach(key => {
-					if (this._shouldSkipAttribute(key)) {
-						return;
-					}
+				// Handle all attributes except special ones
+				const processedAttributes = this._processAttributes(props, context);
+				html += processedAttributes;
 
-					const value = props[key];
-					if (typeof value === 'function') {
-						try {
-							const evalValue = this._evaluateFunction(value, context);
-							if (evalValue !== null && evalValue !== undefined) {
-								html += ` ${key}="${this._escapeHtml(evalValue)}"`;
-							}
-						} catch (e) {
-							console.warn(`StringRenderer: Error evaluating attribute ${key}:`, e);
-						}
-					} else if (value !== null && value !== undefined) {
-						html += ` ${key}="${this._escapeHtml(value)}"`;
-					}
-				});
-
-				// Handle style attribute
-				if (props.style) {
-					const styleStr = this._renderStyle(props.style, context);
-					if (styleStr) {
-						html += ` style="${styleStr}"`;
-					}
+				// Handle style attribute separately
+				const styleStr = this._renderStyle(props.style, context);
+				if (styleStr) {
+					html += ` style="${this._escapeAttributeValue(styleStr)}"`;
 				}
 
 				html += '>';
@@ -167,7 +164,7 @@
 					const text = typeof props.text === 'function'
 						? this._evaluateFunction(props.text, context)
 						: props.text;
-					html += this._escapeHtml(text);
+					html += this._escapeHtml(String(text));
 				} else if (props.children !== undefined) {
 					let children = props.children;
 
@@ -194,16 +191,182 @@
 				return html;
 			}
 
+			_processAttributes(props, context) {
+				let attributesHtml = '';
+
+				Object.keys(props).forEach(key => {
+					// Skip special attributes and event handlers
+					if (this._shouldSkipAttribute(key)) {
+						return;
+					}
+
+					const value = props[key];
+					let processedValue = value;
+
+					// Evaluate functions
+					if (typeof value === 'function') {
+						try {
+							processedValue = this._evaluateFunction(value, context);
+						} catch (e) {
+							console.warn(`StringRenderer: Error evaluating attribute ${key}:`, e);
+							return;
+						}
+					}
+
+					// Handle different attribute types
+					attributesHtml += this._renderAttribute(key, processedValue);
+				});
+
+				return attributesHtml;
+			}
+
+			_renderAttribute(name, value) {
+				// Handle null/undefined values
+				if (value === null || value === undefined) {
+					return '';
+				}
+
+				const lowerName = name.toLowerCase();
+
+				// Handle boolean attributes - aligned with DOMRenderer logic
+				if (this.booleanAttributes.has(lowerName)) {
+					// For boolean attributes, render the attribute name only if truthy
+					if (value === true || value === '' || value === name || value === lowerName) {
+						return ` ${name}`;
+					} else if (value === false) {
+						return '';
+					} else {
+						// For non-boolean values on boolean attributes, treat as regular attribute
+						return ` ${name}="${this._escapeAttributeValue(value)}"`;
+					}
+				}
+
+				// Handle data- and aria- attributes (always render with value)
+				if (lowerName.startsWith('data-') || lowerName.startsWith('aria-')) {
+					return ` ${name}="${this._escapeAttributeValue(value)}"`;
+				}
+
+				// Handle special cases - aligned with DOMRenderer _setStaticAttribute
+				switch (lowerName) {
+					case 'class':
+					case 'classname':
+						// Handle class arrays or objects
+						const className = this._processClassName(value);
+						return className ? ` class="${this._escapeAttributeValue(className)}"` : '';
+
+					case 'for':
+					case 'htmlfor':
+						// Convert htmlFor to for
+						return ` for="${this._escapeAttributeValue(value)}"`;
+
+					case 'tabindex':
+						// Ensure tabindex is a number - aligned with DOMRenderer
+						const tabIndex = parseInt(value, 10);
+						return isNaN(tabIndex) ? '' : ` tabindex="${tabIndex}"`;
+
+					case 'value':
+						// Handle form control values
+						return ` value="${this._escapeAttributeValue(value)}"`;
+
+					case 'type':
+						// Input type attribute
+						return ` type="${this._escapeAttributeValue(value)}"`;
+
+					case 'id':
+						// ID attribute
+						return ` id="${this._escapeAttributeValue(value)}"`;
+
+					case 'name':
+						// Name attribute
+						return ` name="${this._escapeAttributeValue(value)}"`;
+
+					case 'placeholder':
+						// Placeholder attribute
+						return ` placeholder="${this._escapeAttributeValue(value)}"`;
+
+					case 'title':
+						// Title attribute
+						return ` title="${this._escapeAttributeValue(value)}"`;
+
+					case 'alt':
+						// Alt attribute for images
+						return ` alt="${this._escapeAttributeValue(value)}"`;
+
+					case 'src':
+						// Src attribute for images/scripts
+						return ` src="${this._escapeAttributeValue(value)}"`;
+
+					case 'href':
+						// Href attribute for links
+						return ` href="${this._escapeAttributeValue(value)}"`;
+
+					case 'target':
+						// Target attribute for links
+						return ` target="${this._escapeAttributeValue(value)}"`;
+
+					case 'rel':
+						// Rel attribute for links
+						return ` rel="${this._escapeAttributeValue(value)}"`;
+
+					case 'role':
+						// ARIA role attribute
+						return ` role="${this._escapeAttributeValue(value)}"`;
+
+					case 'contenteditable':
+						// ContentEditable attribute
+						return ` contenteditable="${this._escapeAttributeValue(value)}"`;
+
+					case 'draggable':
+						// Draggable attribute
+						return ` draggable="${this._escapeAttributeValue(value)}"`;
+
+					case 'spellcheck':
+						// Spellcheck attribute
+						return ` spellcheck="${this._escapeAttributeValue(value)}"`;
+
+					default:
+						// Regular attributes
+						return ` ${name}="${this._escapeAttributeValue(value)}"`;
+				}
+			}
+
+			_processClassName(value) {
+				if (typeof value === 'string') {
+					return value.trim();
+				}
+
+				if (Array.isArray(value)) {
+					return value
+						.filter(cls => cls && typeof cls === 'string')
+						.map(cls => cls.trim())
+						.filter(cls => cls.length > 0)
+						.join(' ');
+				}
+
+				if (typeof value === 'object' && value !== null) {
+					return Object.entries(value)
+						.filter(([cls, condition]) => condition && cls)
+						.map(([cls]) => cls.trim())
+						.filter(cls => cls.length > 0)
+						.join(' ');
+				}
+
+				return '';
+			}
+
 			_shouldSkipAttribute(key) {
-				return ['children', 'text', 'style'].includes(key) || key.startsWith('on');
+				// Skip special props, style (handled separately), and event handlers
+				return this.skipAttributes.has(key) ||
+					this.eventHandlerPattern.test(key) ||
+					key === 'style';
 			}
 
 			_isVoidElement(tagName) {
-				const voidElements = [
+				const voidElements = new Set([
 					'area', 'base', 'br', 'col', 'embed', 'hr', 'img',
 					'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'
-				];
-				return voidElements.includes(tagName.toLowerCase());
+				]);
+				return voidElements.has(tagName.toLowerCase());
 			}
 
 			_evaluateFunction(fn, context) {
@@ -241,10 +404,16 @@
 							if (typeof value === 'function') {
 								cssValue = this._evaluateFunction(value, context);
 							}
+
+							// Skip undefined/null values
+							if (cssValue === undefined || cssValue === null) {
+								return '';
+							}
+
 							const cssProp = this._camelToKebab(prop);
 							return `${cssProp}: ${cssValue}`;
 						})
-						.filter(rule => rule.split(': ')[1] !== 'undefined')
+						.filter(rule => rule && !rule.endsWith(': undefined') && !rule.endsWith(': null'))
 						.join('; ');
 				}
 
@@ -265,6 +434,32 @@
 					.replace(/>/g, '&gt;')
 					.replace(/"/g, '&quot;')
 					.replace(/'/g, '&#39;');
+			}
+
+			_escapeAttributeValue(value) {
+				if (value == null) {
+					return '';
+				}
+				return String(value)
+					.replace(/&/g, '&amp;')
+					.replace(/"/g, '&quot;')
+					.replace(/'/g, '&#39;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;');
+			}
+
+			// Main renderToString method - the primary public API
+			renderToString(layout, context = null) {
+				if (!layout) {
+					return '<p>No layout provided</p>';
+				}
+
+				try {
+					return this.render(layout, context);
+				} catch (error) {
+					console.error('StringRenderer renderToString error:', error);
+					return `<div style="color: red;">StringRenderer Error: ${error.message}</div>`;
+				}
 			}
 
 			// Interface compatibility methods
@@ -303,8 +498,8 @@
 			scheduledRender = null;
 		}
 
-		// Create instance of StringRenderer
-		const stringRenderer = new StringRenderer();
+		// Create instance of StringRenderer with juris reference - FIXED!
+		const stringRenderer = new StringRenderer(juris);
 
 		return {
 			api: {
@@ -326,6 +521,7 @@
 					}
 
 					try {
+						// Use the stringRenderer instance that has juris reference
 						return stringRenderer.render(layoutToRender);
 					} catch (error) {
 						console.error('StringRenderer renderToString error:', error);

@@ -191,11 +191,13 @@ fastify.get('*', { schema: routeSchema }, async (request, reply) => {
 		router.setRoute(url);
 		// Render to string
 		const content = stringRenderer.renderToString();
+		console.log(content);
 		// Get current state for hydration
 		const state = serverApp.stateManager.state;
 		// Set content type and send optimized HTML
 		reply.type('text/html; charset=utf-8');
 		reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+
 		return htmlTemplate(content, state);
 
 	} catch (error) {
