@@ -1,0 +1,11 @@
+{
+  "output": "public/js/juris-app.js",
+  "files": [
+    "juris/juris.js",
+    "source/app.js"
+  ],
+  "minify": false,
+  "addSeparators": true,
+  "skipMissing": false,
+  "header": "Juris App Bundle - Auto-generated from juris.js + app.js"
+}
