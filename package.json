@@ -1,89 +1,127 @@
 {
-  "name": "juris-kit-app",
-  "version": "0.1.1",
-  "description": "Juris Full Stack SSR App - A server-side rendering application using Juris and Fastify.",
-  "main": "server.js",
+  "name": "@jurisjs/juris-kit-app-template",
+  "version": "1.0.0",
+  "description": "Juris Kit - A powerful SSR framework with built-in state management, routing, and component system",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": {
+    "juris": "./bin/juris.js",
+    "juris-kit": "./bin/juris.js"
+  },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
-  }, 
+  },
   "scripts": {
     "dev": "nodemon --watch juris --watch source --ext js --exec \"npm run build:juris && node server.js\"",
     "build:juris": "node scripts/stitcher.js --config config/stitcher.config.json",
-    "copy": "npm run build:juris",
     "start": "node server.js",
-    "watch:juris": "nodemon --watch juris --watch source --ext js --exec 'npm run build:juris'",
-    "build": "npm run copy && node scripts/build.js",
-    "build:stitch": "node scripts/stitcher.js",
-    "build:minify": "node scripts/stitcher.js --config config/stitch.min.config.json",
-    "build:vendor": "node scripts/stitcher.js --config config/stitch.vendor.config.json",
-    "build:all": "npm run build:vendor && npm run build:stitch && npm run build:minify",
-    "watch": "nodemon --watch src --ext js --exec 'npm run build:stitch'",
+    "build": "npm run build:juris",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:unit": "jest tests/unit",
-    "test:integration": "jest tests/integration",
-    "lint": "eslint src/ tests/ --ext .js",
-    "lint:fix": "eslint src/ tests/ --ext .js --fix",
-    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\" \"*.js\"",
-    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\" \"*.js\"",
-    "setup": "node scripts/setup.js",
-    "clean": "rm -rf dist/ logs/ temp/ coverage/",
-    "docker:build": "docker build -t juris-kit-app .",
-    "docker:dev": "docker-compose -f docker/docker-compose.dev.yml up",
-    "docker:prod": "docker-compose -f docker/docker-compose.yml up",
-    "migrate": "node scripts/migrate.js",
-    "seed": "node scripts/seed.js",
-    "deploy": "npm run build:all && ./scripts/deploy.sh",
-    "health": "curl -f http://localhost:3000/health || exit 1",
-    "init-config": "node scripts/stitcher.js --init",
-    "precommit": "npm run lint && npm run test",
-    "prepush": "npm run test:coverage",
-    "postinstall": "npm run setup"
+    "lint": "eslint juris/ scripts/ --ext .js",
+    "lint:fix": "eslint juris/ scripts/ --ext .js --fix",
+    "format": "prettier --write \"juris/**/*.js\" \"scripts/**/*.js\" \"*.js\"",
+    "format:check": "prettier --check \"juris/**/*.js\" \"scripts/**/*.js\" \"*.js\"",
+    "prepublishOnly": "npm run lint && npm run test && npm run build",
+    "prepare": "npm run build",
+    "version": "npm run format && git add -A .",
+    "postversion": "git push && git push --tags",
+    "release": "npm version patch && npm publish",
+    "release:minor": "npm version minor && npm publish",
+    "release:major": "npm version major && npm publish",
+
+    "htmlcache:build": "node scripts/build-htmlcache.js",
+    "htmlcache:build:prod": "node scripts/build-htmlcache.js juris.html-cache.config.js --minify --sitemap --robots",
+    "htmlcache:build:dev": "node scripts/build-htmlcache.js juris.html-cache.config.js --verbose",
+    "htmlcache:stats": "node scripts/build-htmlcache.js stats",
+    "htmlcache:clean": "node scripts/build-htmlcache.js clean",
+    "htmlcache:watch": "nodemon --watch source --watch juris --ext js --exec \"npm run htmlcache:build:dev\"",
+
+    "build:static": "npm run htmlcache:build:prod",
+    "build:dev": "npm run htmlcache:build:dev",
+    "build:prod": "npm run build:juris && npm run htmlcache:build:prod",
+    
+    "cache:build": "npm run htmlcache:build",
+    "cache:stats": "npm run htmlcache:stats",
+    "cache:clean": "npm run htmlcache:clean"
   },
   "dependencies": {
     "@fastify/compress": "^8.0.3",
+    "@fastify/cors": "^11.0.1",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/static": "^8.2.0",
     "chokidar": "^4.0.3",
+    "commander": "^11.1.0",
+    "fastify": "^5.4.0",
+    "glob": "^10.4.5",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "eslint": "^8.55.0",
+    "eslint-config-node": "^4.1.0",
+    "eslint-plugin-jest": "^27.6.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "prettier": "^3.1.0",
+    "supertest": "^6.3.3"
+  },
+  "peerDependencies": {
     "compression": "^1.7.4",
     "config": "^3.3.9",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "fastify": "^5.4.0",
-    "glob": "^10.4.5",
     "helmet": "^7.1.0",
     "winston": "^3.11.0"
   },
-  "devDependencies": {
-    "@types/node": "^20.10.0",
-    "concurrently": "^8.2.2",
-    "eslint": "^8.55.0",
-    "eslint-config-node": "^4.1.0",
-    "eslint-plugin-jest": "^27.6.0",
-    "husky": "^8.0.3",
-    "jest": "^29.7.0",
-    "lint-staged": "^15.2.0",
-    "nodemon": "^3.0.1",
-    "prettier": "^3.1.0",
-    "supertest": "^6.3.3"
+  "peerDependenciesMeta": {
+    "compression": {
+      "optional": true
+    },
+    "config": {
+      "optional": true
+    },
+    "cors": {
+      "optional": true
+    },
+    "dotenv": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "helmet": {
+      "optional": true
+    },
+    "winston": {
+      "optional": true
+    }
   },
   "keywords": [
     "juris",
     "ssr",
-    "express",
-    "fastify",
-    "router",
     "server-side-rendering",
-    "nodejs",
+    "framework",
+    "fastify",
+    "state-management",
+    "routing",
+    "components",
+    "reactive",
+    "frontend",
+    "fullstack",
+    "web-framework",
     "javascript",
-    "web-framework"
+    "nodejs",
+    "static-generation",
+    "html-cache"
   ],
   "author": {
-    "name": "",
-    "email": "",
-    "url": ""
+    "name": "Your Name",
+    "email": "your.email@example.com",
+    "url": "https://github.com/yourusername"
   },
   "license": "MIT",
   "repository": {
@@ -95,66 +133,34 @@
   },
   "homepage": "https://github.com/jurisjs/juris-kit#readme",
   "files": [
-    "dist/",
-    "src/",
+    "bin/",
+    "juris/",
+    "scripts/",
     "config/",
+    "source/",
     "public/",
+    "docs/",
+    "index.js",
+    "index.d.ts",
     "server.js",
+    "juris.config.js",
+    "juris.html-cache.config.js",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
-  "nodemonConfig": {
-    "watch": [
-      "src/",
-      "config/",
-      "server.js"
-    ],
-    "ext": "js,json",
-    "ignore": [
-      "node_modules/",
-      "dist/",
-      "logs/",
-      "tests/",
-      "coverage/"
-    ],
-    "env": {
-      "NODE_ENV": "development"
-    }
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
-  "jest": {
-    "testEnvironment": "node",
-    "collectCoverageFrom": [
-      "src/**/*.js",
-      "!src/**/*.test.js",
-      "!src/types/**"
-    ],
-    "coverageDirectory": "tests/coverage",
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "html"
-    ],
-    "testMatch": [
-      "tests/**/*.test.js"
-    ],
-    "setupFilesAfterEnv": [
-      "tests/helpers/setup.js"
-    ]
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "lib": "juris"
   },
-  "lint-staged": {
-    "*.js": [
-      "eslint --fix",
-      "prettier --write"
-    ]
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged",
-      "pre-push": "npm run test"
-    }
-  },
-  "config": {
-    "port": 3000,
-    "host": "localhost"
+  "sideEffects": false,
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/jurisjs"
   }
 }

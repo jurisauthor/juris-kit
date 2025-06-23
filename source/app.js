@@ -1,4 +1,5 @@
 // source/app.js - Simplified with external components
+
 (function () {
 	'use strict';
 	// Get Juris from appropriate source depending on environment
@@ -12,7 +13,13 @@
 	} else {
 		throw new Error('Juris not available in this environment');
 	}
-	
+
+	const api = createHeadlessAPI({
+		users: { url: '/api/users' },
+		createUser: { method: 'POST', url: '/api/users' },
+		userPosts: { url: '/api/users/{userId}/posts' }
+	});
+
 	// Factory function to create app instances
 	function createApp(initialState = {}) {
 		return new Juris({
@@ -31,6 +38,12 @@
 					fn: SimpleRouter,
 					options: {
 						preserveOnRoute: ['user'],
+						autoInit: true
+					}
+				},
+				api: {
+					fn: api,
+					options: {
 						autoInit: true
 					}
 				}
@@ -60,7 +73,8 @@
 		const startTime = performance.now();
 		// Create isolated app instance for client
 		const clientApp = createApp(window.__hydration_data);
-
+		window.__juris = clientApp; // Store app instance globally
+		console.log('Client app created with initial state:', window.__juris.stateManager.state.api);
 		// Render immediately
 		clientApp.render('#app');
 

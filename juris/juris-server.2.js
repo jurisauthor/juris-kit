@@ -1,4 +1,4 @@
-// juris/server.js - Enhanced Juris Server with htmlCache Support
+// juris/server.js - Enhanced Juris Server with Full Async Support
 const path = require('path');
 const fs = require('fs');
 
@@ -206,7 +206,6 @@ class JurisServer {
 			path.join(process.cwd(), 'config', 'juris.html-cache.config.js'),
 			path.join(process.cwd(), 'config', 'juris.model.js'), // Keep for backward compatibility
 			path.join(process.cwd(), 'juris.config.js'),
-			path.join(process.cwd(), 'juris.html-cache.config.js'), // Add htmlCache config
 			path.join(process.cwd(), 'juris.model.js'), // Keep for backward compatibility
 			path.join(process.cwd(), '.jurisrc.js')
 		];
@@ -242,7 +241,7 @@ class JurisServer {
 		}
 	}
 
-	// Default configuration with htmlCache section
+	// Default configuration with API section
 	getDefaultConfig() {
 		return {
 			server: {
@@ -303,25 +302,9 @@ class JurisServer {
 				},
 				directories: []
 			},
-			// UPDATED: Use htmlCache instead of static.generation
-			htmlCache: {
-				generation: {
-					enabled: true,
-					outputDir: 'cache/static',
-					routes: ['/about', '/contact'], // Routes eligible for static generation
-					ttl: 5 * 60 * 1000, // 5 minutes
-					minifyHTML: false,
-					onDemand: {
-						enabled: true,
-						maxFileAge: 300000,
-						serveStaleWhileRevalidate: true
-					}
-				}
-			},
 			routes: {
 				catchAll: true,
 				custom: [],
-				pages: {},
 				exclude: {
 					patterns: [
 						// Asset files
@@ -861,10 +844,10 @@ class JurisServer {
 	}
 
 	/**
-	 * 🎯 UPDATED: Check and generate static files on-demand using htmlCache config
+	 * 🎯 NEW METHOD: Check and generate static files on-demand
 	 */
 	async checkAndGenerateStatic(url, request, reply) {
-		// UPDATED: Check htmlCache.generation instead of static.generation
+		// Check if static generation is enabled
 		if (!this.config.htmlCache?.generation?.enabled) {
 			return { served: false };
 		}
@@ -885,7 +868,7 @@ class JurisServer {
 
 			reply.type('text/html; charset=utf-8');
 			reply.header('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
-			reply.header('X-Generated-By', 'Juris-HtmlCache');
+			reply.header('X-Generated-By', 'Juris-Static');
 
 			return { served: true, content: staticContent };
 		}
@@ -906,7 +889,7 @@ class JurisServer {
 
 			reply.type('text/html; charset=utf-8');
 			reply.header('Cache-Control', 'public, max-age=3600');
-			reply.header('X-Generated-By', 'Juris-HtmlCache-OnDemand');
+			reply.header('X-Generated-By', 'Juris-Static-OnDemand');
 			reply.header('X-Generation-Time', Date.now().toString());
 
 			console.log(`✅ Generated and served static file: ${url}`);
@@ -943,7 +926,7 @@ class JurisServer {
 		const stats = fs.statSync(filePath);
 		const age = Date.now() - stats.mtime.getTime();
 
-		// UPDATED: Check configured TTL from htmlCache
+		// Check configured TTL
 		const maxAge = this.config.htmlCache?.generation?.ttl || (5 * 60 * 1000); // Default 5 minutes
 
 		const isFresh = age < maxAge;
@@ -972,16 +955,16 @@ class JurisServer {
 		const content = await this.stringRenderer.renderToString();
 		const state = this.app.stateManager.state;
 
-		// Generate page configuration - UPDATED: Check htmlCache.routes first, then fall back to routes.pages
-		const pageConfig = this.config.htmlCache?.routes?.pages?.[route] || this.config.routes?.pages?.[route] || {};
+		// Generate page configuration
+		const pageConfig = this.config.routes?.pages?.[route] || {};
 		const title = pageConfig.title || `${this.config.app.title} - ${route}`;
 
 		// Create HTML
 		const htmlTemplate = this.createHTMLTemplate();
 		let html = htmlTemplate(content, state, title);
 
-		// UPDATED: Minify HTML if enabled in htmlCache config
-		if (this.config.htmlCache?.generation?.minifyHTML) {
+		// Minify HTML if enabled
+		if (this.config.static?.generation?.minifyHTML) {
 			html = this.minifyHTML(html);
 		}
 
@@ -1004,15 +987,55 @@ class JurisServer {
 	}
 
 	/**
-	 * 📊 UPDATED: Add method to get static generation stats using htmlCache config
+	 * 🔧 Enhanced configuration example for on-demand static generation
+	 */
+	/*
+	module.exports = {
+		features: { ssr: true, api: false },
+		static: {
+			generation: {
+				enabled: true,
+				outputDir: 'cache/static',           // Where to cache static files
+				routes: ['/', '/about', '/contact'], // Routes eligible for static generation
+				ttl: 5 * 60 * 1000,                 // 5 minutes - how long static files are fresh
+				minifyHTML: true,
+				onDemand: {
+					enabled: true,                   // Enable on-demand generation
+					maxFileAge: 300000,             // 5 minutes in milliseconds
+					serveStaleWhileRevalidate: true // Serve stale file while generating new one
+				}
+			}
+		},
+		routes: {
+			catchAll: true,                         // Keep SSR catch-all for reactive routes
+			pages: {
+				'/': { title: 'Home Page' },
+				'/about': { title: 'About Us' },
+				'/contact': { title: 'Contact Us' }
+			}
+		},
+		hooks: {
+			beforeGenerate: async (app, route, config) => {
+				console.log(`🔄 Preparing to generate: ${route}`);
+			},
+			afterGenerate: async (html, state, route, config) => {
+				console.log(`✅ Generated static file for: ${route}`);
+				return { html };
+			}
+		}
+	};
+	*/
+
+	/**
+	 * 📊 Add method to get static generation stats
 	 */
 	getStaticGenerationStats() {
-		if (!this.config.htmlCache?.generation?.enabled) {
+		if (!this.config.static?.generation?.enabled) {
 			return { enabled: false };
 		}
 
-		const outputDir = this.config.htmlCache.generation.outputDir;
-		const routes = this.config.htmlCache.generation.routes || [];
+		const outputDir = this.config.static.generation.outputDir;
+		const routes = this.config.static.generation.routes || [];
 
 		const stats = {
 			enabled: true,
@@ -1139,11 +1162,6 @@ class JurisServer {
 			console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 			console.log(`Configuration: ${this.configPath || 'default'}`);
 
-			// UPDATED: Show htmlCache status in startup info
-			if (this.config.htmlCache?.generation?.enabled) {
-				console.log(`📄 HTML Cache enabled: ${this.config.htmlCache.generation.routes.length} routes configured`);
-			}
-
 			if (process.env.NODE_ENV !== 'production') {
 				console.log('\nEnabled features:');
 				Object.entries(this.config.features).forEach(([feature, enabled]) => {
@@ -1175,14 +1193,6 @@ class JurisServer {
 				if (this.config.routes.catchAll) {
 					console.log('  GET * - SSR catch-all');
 				}
-
-				// Show htmlCache routes
-				if (this.config.htmlCache?.generation?.enabled) {
-					console.log('\n  HTML Cache Routes:');
-					this.config.htmlCache.generation.routes.forEach(route => {
-						console.log(`    📄 ${route} - cacheable`);
-					});
-				}
 			}
 
 		} catch (err) {
@@ -1207,22 +1217,24 @@ class JurisServer {
 		await this.start();
 	}
 
+
 	/**
-	 * UPDATED: Generate static sites based on htmlCache configuration
+	 * Generate static sites based on configuration
+	 * Called when route matches config and reactivity check passes
 	 */
 	async generateStaticSites(options = {}) {
-		// UPDATED: Check htmlCache.generation instead of static.generation
-		if (!this.config.htmlCache?.generation?.enabled) {
-			console.log('📄 HTML Cache generation is disabled in configuration');
+		// Check if static generation is enabled in config
+		if (!this.config.static?.generation?.enabled) {
+			console.log('📄 Static generation is disabled in configuration');
 			return { generated: [], skipped: [], errors: [] };
 		}
 
-		console.log('🚀 Starting HTML cache generation...');
-		console.log(`📁 Output directory: ${this.config.htmlCache.generation.outputDir}`);
+		console.log('🚀 Starting static site generation...');
+		console.log(`📁 Output directory: ${this.config.static.generation.outputDir}`);
 
-		// UPDATED: Merge options with htmlCache config
+		// Merge options with config
 		const generationConfig = {
-			...this.config.htmlCache.generation,
+			...this.config.static.generation,
 			...options
 		};
 
@@ -1279,7 +1291,7 @@ class JurisServer {
 			return results;
 
 		} catch (error) {
-			console.error('❌ HTML cache generation failed:', error);
+			console.error('❌ Static generation failed:', error);
 			results.errors.push({ route: 'SYSTEM', error: error.message });
 			throw error;
 		}
@@ -1390,8 +1402,8 @@ class JurisServer {
 		const content = await this.stringRenderer.renderToString();
 		const state = this.app.stateManager.state;
 
-		// UPDATED: Generate page configuration from htmlCache or routes
-		const pageConfig = this.config.htmlCache?.routes?.pages?.[route] || this.config.routes?.pages?.[route] || {};
+		// Generate page configuration
+		const pageConfig = this.config.routes?.pages?.[route] || {};
 		const title = pageConfig.title || `${this.config.app.title} - ${route}`;
 
 		// Create HTML
@@ -1432,6 +1444,7 @@ class JurisServer {
 
 		console.log(`✅ Generated ${route} (${(fileSize / 1024).toFixed(1)}KB) in ${endTime - startTime}ms`);
 	}
+
 
 	/**
 	 * Prepare output directory
@@ -1588,12 +1601,12 @@ Sitemap: ${baseUrl}/sitemap.xml`;
 	async generateBuildManifest(outputDir, results) {
 		const manifest = {
 			buildTime: new Date().toISOString(),
-			generator: 'Juris HTML Cache Generator',
+			generator: 'Juris Static Site Generator',
 			version: '1.0.0',
 			config: {
-				outputDir: this.config.htmlCache.generation.outputDir,
-				minifyHTML: this.config.htmlCache.generation.minifyHTML,
-				copyAssets: this.config.htmlCache.generation.copyAssets || true
+				outputDir: this.config.static.generation.outputDir,
+				minifyHTML: this.config.static.generation.minifyHTML,
+				copyAssets: this.config.static.generation.copyAssets
 			},
 			stats: results.stats,
 			generated: results.generated.map(r => ({
@@ -1618,7 +1631,7 @@ Sitemap: ${baseUrl}/sitemap.xml`;
 	printGenerationSummary(results) {
 		const { stats, generated, skipped, errors } = results;
 
-		console.log('\n📊 HTML Cache Generation Summary:');
+		console.log('\n📊 Static Generation Summary:');
 		console.log('═'.repeat(50));
 		console.log(`⏱️  Total time: ${stats.totalTime}ms`);
 		console.log(`📄 Generated: ${generated.length} routes`);
@@ -1652,7 +1665,7 @@ Sitemap: ${baseUrl}/sitemap.xml`;
 	}
 
 	/**
-	 * UPDATED: CLI method for static generation using htmlCache
+	 * CLI method for static generation
 	 */
 	static async generateStatic(configPath = null) {
 		const server = new JurisServer(configPath);
@@ -1665,11 +1678,11 @@ Sitemap: ${baseUrl}/sitemap.xml`;
 				process.exit(1);
 			}
 
-			console.log('🎉 HTML cache generation completed successfully!');
+			console.log('🎉 Static site generation completed successfully!');
 			return results;
 
 		} catch (error) {
-			console.error('💥 HTML cache generation failed:', error);
+			console.error('💥 Static generation failed:', error);
 			process.exit(1);
 		}
 	}

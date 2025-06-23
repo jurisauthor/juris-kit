@@ -5,8 +5,11 @@ const fastify = require('fastify')({
 	keepAliveTimeout: 30000, // Increased from 5000
 	connectionTimeout: 60000, // Increased from 10000
 	bodyLimit: 1048576, // 1MB limit
+	maxRequestsPerSocket: 1000,
 	maxParamLength: 100,
 	ignoreTrailingSlash: true,
+	requestIdHeader: false,
+	requestIdLogLabel: false,
 	caseSensitive: false
 });
 const path = require('path');
