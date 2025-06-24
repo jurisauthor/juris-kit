@@ -11,6 +11,7 @@ const StringRendererComponent = (props, context) => {
 			this.juris = juris;
 			this.renderDepth = 0;
 			this.maxRenderDepth = 100;
+			this.specialAttributeHandlers = new Map();
 
 			// Async detection and handling
 			this.asyncDetected = false;
@@ -33,6 +34,9 @@ const StringRendererComponent = (props, context) => {
 			this.eventHandlerPattern = /^on[a-z]/i;
 		}
 
+		getType() {
+			return 'StringRendererComponent';
+		}
 		// MAIN ENTRY POINT - Auto-detects sync vs async and waits for promises
 		render(vnode, context = null) {
 			if (this.renderDepth > this.maxRenderDepth) {
@@ -467,6 +471,15 @@ const StringRendererComponent = (props, context) => {
 			const attributePromises = [];
 
 			Object.keys(props).forEach(key => {
+				if (this.specialAttributeHandlers && this.specialAttributeHandlers.has(key)) {
+					const handler = this.specialAttributeHandlers.get(key);
+					const result = handler(key, props[key]);
+					if (result) {
+						attributesHtml += result;
+					}
+					return; // Skip normal processing
+				}
+
 				// Skip special attributes and event handlers
 				if (this._shouldSkipAttribute(key)) {
 					return;
@@ -516,6 +529,16 @@ const StringRendererComponent = (props, context) => {
 			let attributesHtml = '';
 
 			for (const key of Object.keys(props)) {
+
+				if (this.specialAttributeHandlers && this.specialAttributeHandlers.has(key)) {
+					const handler = this.specialAttributeHandlers.get(key);
+					const result = await handler(key, props[key]);
+					if (result) {
+						attributesHtml += result;
+					}
+					continue; // Skip normal processing
+				}
+
 				// Skip special attributes and event handlers
 				if (this._shouldSkipAttribute(key)) {
 					continue;
@@ -548,7 +571,10 @@ const StringRendererComponent = (props, context) => {
 			}
 
 			const lowerName = name.toLowerCase();
-
+			if (this.specialAttributeHandlers.has(lowerName)) {
+				this.specialAttributeHandlers.get(lowerName)(element, value);
+				return;
+			}
 			// Handle boolean attributes - aligned with DOMRenderer logic
 			if (this.booleanAttributes.has(lowerName)) {
 				// For boolean attributes, render the attribute name only if truthy

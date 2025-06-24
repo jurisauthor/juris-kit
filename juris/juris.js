@@ -10,7 +10,7 @@
  * 
  * Author: Resti Guay
  * Maintained by: Juris Github Team
- * Version: 0.5.2 (stable)
+ * Version: 0.6.0 (stable)
  * License: MIT
  * GitHub: https://github.com/jurisjs/juris
  * Website: https://jurisjs.com
@@ -1188,6 +1188,7 @@
         constructor(juris) {
             this.juris = juris;
             this.subscriptions = new WeakMap();
+            this.specialAttributeHandlers = new Map();
             this.eventMap = {
                 ondoubleclick: 'dblclick',
                 onmousedown: 'mousedown',
@@ -1233,6 +1234,10 @@
             // Lean async handling with promisify integration
             this.asyncCache = new Map();
             this.asyncPlaceholders = new WeakMap();
+        }
+
+        getType() {
+            return 'DOMRenderer';
         }
 
         getRenderStats() {

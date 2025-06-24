@@ -1,7 +1,6 @@
 // juris/server.js - Enhanced Juris Server with htmlCache Support
 const path = require('path');
 const fs = require('fs');
-
 class JurisAPI {
 	constructor(config = {}) {
 		this.endpoints = new Map();
@@ -712,13 +711,15 @@ class JurisServer {
 
 			// FIXED: Ensure headless components are fully initialized
 			const stringRendererComponent = this.app.getHeadlessComponent('StringRenderer');
+			const swapComponent = this.app.getHeadlessComponent('SwapAttributeComponent');
 			if (!stringRendererComponent) {
 				throw new Error('StringRenderer headless component not found');
 			}
 
 			this.stringRenderer = stringRendererComponent.api;
 			this.stringRenderer.enableStringRenderer();
-
+			// Ensure SwapAttributeComponent is initialized
+			this.app.initializeHeadlessComponent('SwapAttributeComponent', {});
 			const routerComponent = this.app.getHeadlessComponent('Router');
 			if (!routerComponent) {
 				throw new Error('Router headless component not found');
@@ -803,7 +804,9 @@ class JurisServer {
 				}
 
 				this.router.setRoute(url);
-				const content = await this.stringRenderer.renderToString();
+				let content = this.stringRenderer.renderToString()
+				content = content?.then ? await content : content; // Ensure we await if it's a promise
+
 				const state = this.app.stateManager.state;
 
 				const pageConfig = this.config.routes.pages?.[url] || {};
@@ -1069,8 +1072,8 @@ class JurisServer {
 			// Check if files exist and adjust paths
 			const cssPath = this.config.app.cssPath || '/public/css/styles.css';
 			const jsPath = this.config.app.jsPath || '/public/js/juris-app.js';
-
-			return `<!DOCTYPE html>
+			const jsScript = this.app.stateManager.state._juris?.swapScripts || null
+			let html = `<!DOCTYPE html>
 <html lang="${this.config.app.lang || 'en'}">
 <head>
     <meta charset="${meta.charset || 'UTF-8'}">
@@ -1084,13 +1087,25 @@ class JurisServer {
     <link rel="stylesheet" href="${cssPath}">
 </head>
 <body>
-    <div id="app">${content}</div>
-    <script>
-        window.__hydration_data = ${JSON.stringify(state)};
-    </script>
-    <script src="${jsPath}"></script>
+    <div id="app">${content}</div>`;
+
+			if (!jsScript) {
+				html += `
+			<script>
+					window.__hydration_data = ${JSON.stringify(state)};
+			</script>`;
+			}
+			if (jsScript) {
+				html += `<script>${jsScript}</script>`;
+			} else {
+				html += `
+    <script src="${jsPath}"></script>`;
+			}
+
+			html += `
 </body>
 </html>`;
+			return html;
 		};
 	}
 

@@ -34,6 +34,10 @@
 					fn: StringRendererComponent,
 					options: { autoInit: true }
 				},
+				SwapAttributeComponent: {
+					fn: SwapAttributeComponent,
+					options: { autoInit: false }
+				},
 				Router: {
 					fn: SimpleRouter,
 					options: {
