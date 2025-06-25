@@ -1,4 +1,4 @@
-// juris/server.js - Enhanced Juris Server with htmlCache Support
+// Location: juris/server.js - Enhanced Juris Server with htmlCache Support
 const path = require('path');
 const fs = require('fs');
 class JurisAPI {
@@ -11,6 +11,7 @@ class JurisAPI {
 			request: [],
 			response: []
 		};
+		this.createAPIHandler = null;
 	}
 
 	// Set endpoint configuration
@@ -423,10 +424,6 @@ class JurisServer {
 			await this.setupCustomRoutes();
 		}
 
-		// Register API routes BEFORE SSR catch-all
-		if (this.config.features.api && this.api) {
-			await this.registerAPIRoutes();
-		}
 
 		if (this.config.monitoring?.healthCheck?.enabled) {
 			this.setupHealthCheck();
@@ -439,6 +436,10 @@ class JurisServer {
 		// FIXED: Properly await app loading
 		await this.loadJurisApp();
 
+		// Register API routes BEFORE SSR catch-all
+		if (this.config.features.api && this.api) {
+			await this.registerAPIRoutes();
+		}
 		// Setup SSR catch-all route LAST (so it doesn't capture API routes)
 		if (this.config.features.ssr && this.config.routes.catchAll) {
 			await this.setupSSRRoute();
@@ -504,11 +505,15 @@ class JurisServer {
 
 	// Register API routes with Fastify
 	async registerAPIRoutes() {
-		// Register API endpoints under the prefix
-		await this.fastify.register(async (fastify) => {
-			await this.api.registerWithFastify(fastify);
-		}, { prefix: this.config.api.prefix });
-	}
+		const apiHandler = this.createAPIHandler();
+
+		// Register all HTTP methods for API routes
+		this.fastify.get('/api/*', apiHandler);
+		this.fastify.post('/api/*', apiHandler);
+		this.fastify.put('/api/*', apiHandler);
+		this.fastify.patch('/api/*', apiHandler);
+		this.fastify.delete('/api/*', apiHandler);
+	};
 
 	// Initialize DOM globals for SSR
 	initializeDOMGlobals() {
@@ -697,10 +702,14 @@ class JurisServer {
 		try {
 			const appPath = path.join(process.cwd(), 'public/js/juris-app.js');
 			let createApp;
-
 			if (fs.existsSync(appPath)) {
 				const appModule = require(appPath);
 				createApp = appModule.createApp;
+				if (appModule.createAPIHandler) {
+					this.createAPIHandler = appModule.createAPIHandler;
+				} else {
+					console.warn('No createAPIHandler found in juris-app.js, using default API handler');
+				}
 			} else {
 				const appModule = require(path.join(process.cwd(), 'source/app.js'));
 				createApp = appModule.createApp;
@@ -726,7 +735,6 @@ class JurisServer {
 			}
 
 			this.router = routerComponent.api;
-
 			console.log('✅ Juris app loaded successfully');
 		} catch (error) {
 			console.error('❌ Error loading Juris app:', error);
@@ -734,7 +742,7 @@ class JurisServer {
 		}
 	}
 
-	// FIXED: Enhanced SSR route setup with proper async component support
+	//Enhanced SSR route setup with proper async component support
 	async setupSSRRoute() {
 		const htmlTemplate = this.createHTMLTemplate();
 
@@ -748,21 +756,6 @@ class JurisServer {
 
 		this.fastify.get('*', { schema: routeSchema }, async (request, reply) => {
 			const url = request.url;
-
-			// Debug logging for static files
-			if (process.env.NODE_ENV !== 'production') {
-				//console.log(`🔍 SSR Route hit: ${url}`);
-			}
-
-			// Auto-detect API requests and reject them from SSR
-			if (url.startsWith(this.config.api.prefix)) {
-				if (process.env.NODE_ENV !== 'production') {
-					console.log(`❌ API request rejected from SSR: ${url}`);
-				}
-				reply.code(404);
-				return { error: 'API endpoint not found', path: url };
-			}
-
 			// Check static file patterns first (more comprehensive)
 			for (const pattern of this.config.routes.exclude.patterns) {
 				if (pattern.test(url)) {
@@ -1088,13 +1081,13 @@ class JurisServer {
 </head>
 <body>
     <div id="app">${content}</div>`;
-
 			if (!jsScript) {
 				html += `
 			<script>
 					window.__hydration_data = ${JSON.stringify(state)};
 			</script>`;
 			}
+
 			if (jsScript) {
 				html += `<script>${jsScript}</script>`;
 			} else {

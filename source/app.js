@@ -17,7 +17,19 @@
 	const api = createHeadlessAPI({
 		users: { url: '/api/users' },
 		createUser: { method: 'POST', url: '/api/users' },
-		userPosts: { url: '/api/users/{userId}/posts' }
+		userPosts: { url: '/api/users/{userId}/posts' },
+
+		// Custom endpoints
+		userByEmail: { url: '/api/users/findByEmail' },
+		userProfile: { url: '/api/users/{id}/profile' },
+		login: { method: 'POST', url: '/api/auth/login' },
+		logout: { method: 'POST', url: '/api/auth/logout' },
+		dashboardStats: { url: '/api/dashboard/getStats' },
+		searchUsers: { url: '/api/search?type=users' },
+
+		// Bulk operations
+		bulkUpdateUsers: { method: 'PUT', url: '/api/users/bulkUpdate' },
+		resetPassword: { method: 'POST', url: '/api/users/resetPassword' }
 	});
 
 	// Factory function to create app instances
@@ -92,12 +104,15 @@
 
 	// Server-side exports only
 	if (typeof module !== 'undefined') {
-		module.exports = { createApp };
+		module.exports = { createApp, createHeadlessAPI, createAPIHandler, parseAPIPath };
 	}
 
 	// Only expose createApp factory for server hydration
 	if (typeof window !== 'undefined') {
 		window.createApp = createApp;
+		window.createHeadlessAPI = createHeadlessAPI;
+		window.createAPIHandler = createAPIHandler;
+		window.parseAPIPath = parseAPIPath;
 	}
 
 })();

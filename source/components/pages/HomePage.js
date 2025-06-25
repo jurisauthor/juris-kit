@@ -1,8 +1,10 @@
-const HomePage = (props, { getState, setState, api, juris }) => {
-	const { endpoints } = api;
-	const { users } = api.endpoints();
+const HomePage = async (props, { getState, setState, api, juris }) => {
+	const { users, userByEmail } = api.endpoints();
 	const { data, loading, error } = users;
-	//if (!data && !loading) await api.users();
+	//if (!data && !loading) 
+	api.users();
+	//const usersFromServer = await api.users();
+	//console.log('Users from server:', usersFromServer);
 	return ({
 		div: {
 			style: { padding: '20px' },
