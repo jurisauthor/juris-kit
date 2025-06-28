@@ -179,7 +179,7 @@ const StringRendererComponent = (props, context) => {
 
 				// If component returned a promise, return it directly - let caller handle
 				if (componentResult && typeof componentResult.then === 'function') {
-					console.log(`StringRenderer: Component ${tagName} returned promise, returning for waiting`);
+					//console.log(`StringRenderer: Component ${tagName} returned promise, returning for waiting`);
 					return componentResult.then(resolvedResult => {
 						return this._processComponentResult(resolvedResult, tagName, componentContext);
 					});

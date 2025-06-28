@@ -1,9 +1,47 @@
 /**
  * Juris (JavaScript Unified Reactive Interface Solution)
+ * The only Non-Blocking Reactive Framework for JavaScript
  * Author: Resti Guay
- * Version: 0.6.0 (optimized)
+ * Version: 0.17.0
  * License: MIT
+ * GitHub: https://github.com/jurisjs/juris
+ * Website: https://jurisjs.com/
+ * Features:
+ * - Temporal Independent
+ * - Automcatic deep call stack branch aware dependency detection
+ * - Smart Promise Handling
+ * - Component lazy compilation
+ * - Non-Blocking Rendering
+ * 
+ * IMPORTANT!!! Notes to AI:
+ * 1. Reactivity works when getState is called from intended functional attributes and children. 
+ * 2. Use compress object structure and add labels into the end brackets for nested divs, tables, select, groups and forms
+ * 3. Use getState third attribute with false value to skip subscription
+ * 4. Components will not re-render until their parent triggeres re-render.
+ * 5. All props and attributes can handle async/sync natively,
+ * 6. Use service injection AMAP
+ * 7. Define component as function and dont inject directly into Juris during instantiation.
+ * ex:
+ * return {
+ *   {div:{className:'main', //note: static and short should be inline,
+ *      text:()=>getState('reactive.text.value','Hello'),//note: reactive, should be new line
+ *      style:{color:'red', border:'solid 1px blue'},//note: still okay if in-line
+ *      children:[
+ *        {button:{text:'static label', //note: another static and short should be inline,
+ *          onClick:()=>clickHandler()
+ *        }}//button
+ *        {input:{type:'text',min:'1', max:'10',
+            value: () => juris.getState('counter.step', 1), //note: reactive value
+ *          oninput: (e) => {
+                const newStep = parseInt(e.target.value) || 1;
+                juris.setState('counter.step', Math.max(1, Math.min(10, newStep)));
+            }
+ *        }}//input
+ *      ]
+ *   }}//div.main
+ * }//return
  */
+
 (function () {
     'use strict';
 
@@ -24,13 +62,50 @@
     };
 
     const createPromisify = () => {
-        let useNative = typeof Promise.try === 'function';
+        const activePromises = new Set();
+        let isTracking = false;
+        const subscribers = new Set();
+
+        const checkAllComplete = () => {
+            if (activePromises.size === 0 && subscribers.size > 0) {
+                subscribers.forEach(callback => callback());
+            }
+        };
+
+        const trackingPromisify = result => {
+            const promise = result?.then ? result : Promise.resolve(result);
+
+            if (isTracking && promise !== result) {
+                activePromises.add(promise);
+                promise.finally(() => {
+                    activePromises.delete(promise);
+                    setTimeout(checkAllComplete, 0);
+                });
+            }
+
+            return promise;
+        };
+
         return {
-            promisify: result => useNative ? Promise.try(() => result) : result?.then ? result : Promise.resolve(result),
-            setPromiseMode: mode => useNative = mode === 'native' || (mode !== 'custom' && typeof Promise.try === 'function')
+            promisify: trackingPromisify,
+            startTracking: () => {
+                isTracking = true;
+                activePromises.clear();
+            },
+            stopTracking: () => {
+                isTracking = false;
+                subscribers.clear();
+            },
+            onAllComplete: (callback) => {
+                subscribers.add(callback);
+                if (activePromises.size === 0) {
+                    setTimeout(callback, 0);
+                }
+                return () => subscribers.delete(callback);
+            }
         };
     };
-    const { promisify, setPromiseMode } = createPromisify();
+    const { promisify, startTracking, stopTracking, onAllComplete } = createPromisify();
 
     // State Manager
     class StateManager {
@@ -61,10 +136,10 @@
                 this.setState(path, JSON.parse(JSON.stringify(value))));
             Object.entries(preserved).forEach(([path, value]) => this.setState(path, value));
         }
-
-        getState(path, defaultValue = null) {
+        /* 1. Reactivity works when getState is called from intended functional attributes and children.  */
+        getState(path, defaultValue = null, track = true) {
             if (!isValidPath(path)) return defaultValue;
-            this.currentTracking?.add(path);
+            if (track) this.currentTracking?.add(path);
             const parts = getPathParts(path);
             let current = this.state;
             for (const part of parts) {
@@ -506,7 +581,7 @@
 
                 if (typeof result.render === 'function' && !this._hasLifecycleHooks(result)) {
                     const renderResult = result.render();
-                    if (renderResult?.then) return this._handleAsyncRender(promisify(renderResult), name, componentStates);
+                    if (renderResult?.then) return this._handleAsyncRender(promisify(renderResult), name, componentStates, result.indicator);
 
                     const element = this.juris.domRenderer.render(renderResult);
                     if (element && componentStates.size > 0) this.componentStates.set(element, componentStates);
@@ -531,8 +606,8 @@
                 result.onMount || result.onUpdate || result.onUnmount;
         }
 
-        _handleAsyncRender(renderPromise, name, componentStates) {
-            const placeholder = this._createPlaceholder(`Rendering ${name}...`, 'juris-async-render');
+        _handleAsyncRender(renderPromise, name, componentStates, indicator = null) {
+            const placeholder = indicator ? this.juris.domRenderer.render(indicator) : this._createPlaceholder(`Loading ${name}...`, 'juris-async-loading');
 
             renderPromise.then(renderResult => {
                 try {
@@ -2138,7 +2213,7 @@
 
         createHeadlessContext(element = null) {
             const context = {
-                getState: (path, defaultValue) => this.stateManager.getState(path, defaultValue),
+                getState: (path, defaultValue, track) => this.stateManager.getState(path, defaultValue, track),
                 setState: (path, value, context) => this.stateManager.setState(path, value, context),
                 subscribe: (path, callback) => this.stateManager.subscribe(path, callback),
                 services: this.services,
@@ -2168,7 +2243,7 @@
 
         createContext(element = null) {
             const context = {
-                getState: (path, defaultValue) => this.stateManager.getState(path, defaultValue),
+                getState: (path, defaultValue, track) => this.stateManager.getState(path, defaultValue, track),
                 setState: (path, value, context) => this.stateManager.setState(path, value, context),
                 subscribe: (path, callback) => this.stateManager.subscribe(path, callback),
                 services: this.services,
@@ -2203,7 +2278,7 @@
         }
 
         // Public API
-        getState(path, defaultValue) { return this.stateManager.getState(path, defaultValue); }
+        getState(path, defaultValue, track) { return this.stateManager.getState(path, defaultValue, track); }
         setState(path, value, context) { return this.stateManager.setState(path, value, context); }
         subscribe(path, callback, hierarchical = true) { return this.stateManager.subscribe(path, callback, hierarchical); }
         subscribeExact(path, callback) { return this.stateManager.subscribeExact(path, callback); }
@@ -2245,28 +2320,44 @@
 
         render(container = '#app') {
             const containerEl = typeof container === 'string' ? document.querySelector(container) : container;
-            if (!containerEl) {
-                console.error('Container not found:', container);
-                return;
-            }
+            if (!containerEl) return;
 
-            Array.from(containerEl.children).forEach(child => this.domRenderer.cleanup(child));
-            containerEl.innerHTML = '';
-            this.headlessManager.initializeQueued();
+            // Check if hydration mode is enabled via state
+            const isHydration = this.getState('isHydration', false);
 
-            try {
-                if (!this.layout) {
-                    containerEl.innerHTML = '<p>No layout configured</p>';
-                    return;
-                }
-
-                const element = this.domRenderer.render(this.layout);
-                if (element) containerEl.appendChild(element);
-            } catch (error) {
-                console.error('Render error:', error);
-                this._renderError(containerEl, error);
+            if (isHydration) {
+                return this._renderWithHydration(containerEl);
+            } else {
+                return this._renderImmediate(containerEl);
             }
         }
+        _renderImmediate = function (containerEl) {
+            containerEl.innerHTML = '';
+            const element = this.domRenderer.render(this.layout);
+            if (element) containerEl.appendChild(element);
+        };
+        _renderWithHydration = async function (containerEl) {
+            const stagingEl = document.createElement('div');
+            stagingEl.style.cssText = 'position: absolute; left: -9999px; visibility: hidden;';
+            document.body.appendChild(stagingEl);
+
+            try {
+                startTracking();
+                const element = this.domRenderer.render(this.layout);
+                if (element) stagingEl.appendChild(element);
+
+                await onAllComplete();
+
+                containerEl.innerHTML = '';
+                while (stagingEl.firstChild) {
+                    containerEl.appendChild(stagingEl.firstChild);
+                }
+                this.headlessManager.initializeQueued();
+            } finally {
+                stopTracking();
+                document.body.removeChild(stagingEl);
+            }
+        };
 
         _renderError(container, error) {
             const errorEl = document.createElement('div');
@@ -2299,13 +2390,11 @@
     if (typeof window !== 'undefined') {
         window.Juris = Juris;
         window.deepEquals = deepEquals;
-        window.setPromiseMode = setPromiseMode;
     }
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Juris;
         module.exports.deepEquals = deepEquals;
-        module.exports.setPromiseMode = setPromiseMode;
     }
 
 })();
