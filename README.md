@@ -1,5 +1,5 @@
 # Juris Kit 🚀
-
+# Not For Producton Use Yet!
 A powerful, lightweight SSR (Server-Side Rendering) framework with built-in state management, routing, and component system. Juris Kit makes building reactive full-stack applications simple and enjoyable.
 
 [![npm version](https://img.shields.io/npm/v/@jurisjs/juris-kit.svg)](https://www.npmjs.com/package/@jurisjs/juris-kit)
@@ -15,7 +15,7 @@ A powerful, lightweight SSR (Server-Side Rendering) framework with built-in stat
 - **🧩 Component System** - Simple, powerful component architecture
 - **📦 Zero Config** - Works out of the box with sensible defaults
 - **🔧 Fully Configurable** - Extensive configuration options when you need them
-- **🚀 Production Ready** - Compression, caching, security headers included
+- **🚀 Production Grade** - Compression, caching, security headers included
 - **🔥 Hot Reload** - Development server with automatic rebuilding
 - **📱 SEO Friendly** - Full SSR support for better SEO
 
